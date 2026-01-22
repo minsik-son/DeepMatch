@@ -18,8 +18,12 @@ app.get('/', (req, res) => {
   res.send('Cheapazon Backend is running');
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
-
+// Export for Vercel
 export default app;
+
+// Only start server if not running in Vercel (serverless)
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}
