@@ -85,8 +85,8 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         // --- 3-STAGE FILTERING LOOP (Optimized for Cost) ---
         let bestMatch = null;
 
-        // 상위 10개만 검사
-        for (const item of products.slice(0, 10)) {
+        // 상위 20개만 검사
+        for (const item of products.slice(0, 20)) {
             const itemPrice = parseFloat(item.target_sale_price);
             const savings = numericPrice - itemPrice;
 
@@ -94,6 +94,14 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             if (savings <= 0) {
                 console.log(`[Filter] Not cheaper: ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} >= Amz: ${numericPrice})`);
                 continue; // 다음 상품으로 이동
+            }
+
+
+            // [Stage 1.5] Suspicious Price Check (너무 싸면 의심하고 거름)
+            // 아마존 가격의 30% 미만인 경우 (즉, 70% 이상 저렴한 경우)
+            if (itemPrice < numericPrice * 0.3) {
+                console.log(`[Filter] Suspiciously cheap (>70% off): ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} vs Amz: ${numericPrice})`);
+                continue; // 케이스나 부품일 확률이 높으므로 스킵
             }
 
             // [Stage 2] Negative Keyword Filter (돈 안 드는 연산: 액세서리인지 확인)
