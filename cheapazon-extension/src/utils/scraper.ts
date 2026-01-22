@@ -35,6 +35,7 @@ export const getProductDetails = (): ProductDetails | null => {
 
         const imageElement = document.getElementById('landingImage') as HTMLImageElement;
         const imageUrl = imageElement ? imageElement.src : '';
+        console.log('Image URL:', imageUrl);
 
         return {
             asin,

@@ -4,6 +4,7 @@ export interface AmazonProduct {
     price: number;
     currency: 'USD' | 'CAD';
     domain: 'amazon.com' | 'amazon.ca';
+    imageUrl?: string;
 }
 
 export interface AliExpressProduct {

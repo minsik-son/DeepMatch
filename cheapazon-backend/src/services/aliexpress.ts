@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { AmazonProduct, AliExpressProduct } from '../types';
-import { extractKeywords, validateProductMatch } from './gemini';
+import { extractKeywords, validateProductMatch, compareProductImages } from './gemini';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -84,6 +84,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
         // --- 3-STAGE FILTERING LOOP (Optimized for Cost) ---
         let bestMatch = null;
+        const candidates: any[] = [];
 
         // 상위 20개만 검사
         for (const item of products.slice(0, 20)) {
@@ -92,7 +93,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
             // [Stage 1] Price Cut (가장 중요: 안 싸면 바로 버림)
             if (savings <= 0) {
-                console.log(`[Filter] Not cheaper: ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} >= Amz: ${numericPrice})`);
+                console.log(`[Filter] Not cheaper: ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} >= Amz: ${numericPrice}) \n`);
                 continue; // 다음 상품으로 이동
             }
 
@@ -100,7 +101,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             // [Stage 1.5] Suspicious Price Check (너무 싸면 의심하고 거름)
             // 아마존 가격의 30% 미만인 경우 (즉, 70% 이상 저렴한 경우)
             if (itemPrice < numericPrice * 0.3) {
-                console.log(`[Filter] Suspiciously cheap (>70% off): ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} vs Amz: ${numericPrice})`);
+                console.log(`[Filter] Suspiciously cheap (>70% off): ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} vs Amz: ${numericPrice}) \n`);
                 continue; // 케이스나 부품일 확률이 높으므로 스킵
             }
 
@@ -114,7 +115,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
                 // 아마존 제목에는 없는데 알리 제목에만 'case' 등이 있으면 액세서리로 간주
                 if (aliLower.includes(neg) && !amzLower.includes(neg)) {
                     isAccessory = true;
-                    console.log(`[Filter] Accessory keyword '${neg}': ${item.product_title}`);
+                    console.log(`[Filter] Accessory keyword '${neg}': ${item.product_title} \n \n`);
                     break;
                 }
             }
@@ -126,17 +127,60 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             const isSemanticMatch = await validateProductMatch(product.title, item.product_title, priceRatio);
 
             if (!isSemanticMatch) {
-                console.log(`[Filter] AI Rejected: ${item.product_title.substring(0, 40)}...`);
+                console.log(`[Filter] AI Rejected: ${item.product_title.substring(0, 40)}... \n\n`);
                 continue; // AI가 아니라고 하면 스킵
             }
 
-            // [Final] 모든 관문을 통과함 -> 매칭 성공
-            bestMatch = item;
-            bestMatch.target_sale_price = itemPrice.toString();
-            console.log(`[MATCH] Found valid match! Savings: ${savings.toFixed(2)}`);
-            console.log('---------------------------------------------');
-            break; // 더 이상 찾을 필요 없이 루프 종료
+            // [Candidate] Valid candidate found
+            console.log(`[Candidate] Semantic Match: ${item.product_title.substring(0, 30)}... \n\n`);
+            // Store original string price to be safe, or just item
+            // item is from the API response
+            bestMatch = item; // Temporary assignment for referencing
+
+            // Add to candidates list
+            // We store the parsed price for savings calculation later if selected
+            candidates.push({ item, price: itemPrice, savings });
+
+            if (candidates.length >= 3) break; // Collect max 3 candidates
         }
+
+        if (candidates.length === 0) {
+            console.log('No valid match found after validation.');
+            console.log('---------------------------------------------');
+            return null;
+        }
+
+        // Default to first candidate
+        let selectedCandidate = candidates[0];
+
+        // [Stage 4] Image Verification (If multiple candidates & image available)
+        console.log('$$$$ step 4 start $$$$')
+        if (candidates.length > 1 && product.imageUrl) {
+            console.log(`Comparing images for ${candidates.length} candidates...`);
+            const candidatesForGemini = candidates.map(c => ({
+                id: c.item.product_id,
+                imageUrl: c.item.product_main_image_url,
+                title: c.item.product_title
+            }));
+
+            const bestId = await compareProductImages(product.imageUrl, candidatesForGemini);
+            if (bestId) {
+                const found = candidates.find(c => c.item.product_id === bestId);
+                if (found) {
+                    selectedCandidate = found;
+                    console.log(`[Image] Gemini preferred: ${selectedCandidate.item.product_title.substring(0, 30)}...`);
+                }
+            }
+        }
+        else {
+            console.log(`No image verification candidates. ${product.imageUrl}`);
+            console.log(`candidates: ${JSON.stringify(candidates)}`);
+            console.log('---------------------------------------------');
+            console.log(`product: ${JSON.stringify(product)}`)
+        }
+
+        bestMatch = selectedCandidate.item;
+        const finalSavings = selectedCandidate.savings; // Use pre-calculated savings
 
         if (!bestMatch) {
             console.log('No valid match found after validation.');
@@ -145,7 +189,6 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         }
 
         const aliPrice = parseFloat(bestMatch.target_sale_price);
-        const finalSavings = parseFloat((numericPrice - aliPrice).toFixed(2));
 
         return {
             aliTitle: bestMatch.product_title,

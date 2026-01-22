@@ -6,7 +6,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'SEARCH_ALI') {
-        const { asin, title, price, currency, domain } = message.payload;
+        const { asin, title, price, imageUrl, currency, domain } = message.payload;
         const API_BASE_URL = 'http://localhost:3000'; // Hardcoded for dev, or inject via build
 
         console.log('[Background] Searching AliExpress for:', title);
@@ -16,7 +16,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ asin, title, price, currency, domain }),
+            body: JSON.stringify({ asin, title, price, imageUrl, currency, domain }),
         })
             .then(response => response.json())
             .then(data => {

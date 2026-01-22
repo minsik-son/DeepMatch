@@ -27,6 +27,7 @@ const init = async () => {
             asin: product.asin,
             title: product.title,
             price: product.price,
+            imageUrl: product.imageUrl,
             currency,
             domain: hostname.includes('ca') ? 'amazon.ca' : 'amazon.com'
         }
