@@ -82,66 +82,61 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         const products = result.resp_result.result.products.product;
         if (products.length === 0) return null;
 
-        // --- 3-STAGE FILTERING LOOP (Optimized for Cost) ---
-        let bestMatch = null;
-        const candidates: any[] = [];
-
-        // 상위 20개만 검사
+        // --- 3-STAGE FILTERING LOOP (Optimized for Cost & Speed) ---
+        
+        // Stage 1 & 2: Collect potential candidates with cheap filters first
+        const preCandidates = [];
         for (const item of products.slice(0, 20)) {
             const itemPrice = parseFloat(item.target_sale_price);
             const savings = numericPrice - itemPrice;
 
-            // [Stage 1] Price Cut (가장 중요: 안 싸면 바로 버림)
-            if (savings <= 0) {
-                console.log(`[Filter] Not cheaper: ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} >= Amz: ${numericPrice}) \n`);
-                continue; // 다음 상품으로 이동
-            }
+            // Price Cut Filter
+            if (savings <= 0) continue;
 
+            // Suspiciously Cheap Filter
+            if (itemPrice < numericPrice * 0.3) continue;
 
-            // [Stage 1.5] Suspicious Price Check (너무 싸면 의심하고 거름)
-            // 아마존 가격의 30% 미만인 경우 (즉, 70% 이상 저렴한 경우)
-            if (itemPrice < numericPrice * 0.3) {
-                console.log(`[Filter] Suspiciously cheap (>70% off): ${item.product_title.substring(0, 30)}... (Ali: ${itemPrice} vs Amz: ${numericPrice}) \n`);
-                continue; // 케이스나 부품일 확률이 높으므로 스킵
-            }
-
-            // [Stage 2] Negative Keyword Filter (돈 안 드는 연산: 액세서리인지 확인)
+            // Negative Keyword Filter
             const negativeKeywords = ['case', 'cover', 'glass', 'film', 'strap', 'band', 'stand', 'holder', 'part', 'replacement', 'battery'];
             const amzLower = product.title.toLowerCase();
             const aliLower = item.product_title.toLowerCase();
-
             let isAccessory = false;
             for (const neg of negativeKeywords) {
-                // 아마존 제목에는 없는데 알리 제목에만 'case' 등이 있으면 액세서리로 간주
                 if (aliLower.includes(neg) && !amzLower.includes(neg)) {
                     isAccessory = true;
-                    console.log(`[Filter] Accessory keyword '${neg}': ${item.product_title} \n \n`);
                     break;
                 }
             }
-            if (isAccessory) continue; // 액세서리면 스킵
+            if (isAccessory) continue;
 
-            // [Stage 3] AI Semantic Check (돈 드는 연산: 최종 후보만 검사)
-            // 여기까지 왔다는 건 "싸고" + "키워드상 액세서리가 아님"을 의미함
-            const priceRatio = itemPrice / numericPrice;
-            const isSemanticMatch = await validateProductMatch(product.title, item.product_title, priceRatio);
+            // If it passes all cheap filters, add to pre-candidates for expensive AI check
+            preCandidates.push({ item, price: itemPrice, savings });
+        }
 
-            if (!isSemanticMatch) {
-                console.log(`[Filter] AI Rejected: ${item.product_title.substring(0, 40)}... \n\n`);
-                continue; // AI가 아니라고 하면 스킵
+        // Stage 3: AI Semantic Check in Parallel
+        const candidates = [];
+        if (preCandidates.length > 0) {
+            console.log(`Running AI validation for ${preCandidates.length} potential candidates...`);
+
+            // Create an array of promises for all AI validation calls
+            const validationPromises = preCandidates.map(p => {
+                const priceRatio = p.price / numericPrice;
+                return validateProductMatch(product.title, p.item.product_title, priceRatio);
+            });
+
+            // Await all promises in parallel
+            const validationResults = await Promise.all(validationPromises);
+
+            // Filter for candidates that passed AI validation
+            for (let i = 0; i < preCandidates.length; i++) {
+                if (validationResults[i]) {
+                    console.log(`[Candidate] Semantic Match: ${preCandidates[i].item.product_title.substring(0, 30)}... \n\n`);
+                    candidates.push(preCandidates[i]);
+                    if (candidates.length >= 3) break; // Collect max 3 candidates
+                } else {
+                    console.log(`[Filter] AI Rejected: ${preCandidates[i].item.product_title.substring(0, 40)}... \n\n`);
+                }
             }
-
-            // [Candidate] Valid candidate found
-            console.log(`[Candidate] Semantic Match: ${item.product_title.substring(0, 30)}... \n\n`);
-            // Store original string price to be safe, or just item
-            // item is from the API response
-            bestMatch = item; // Temporary assignment for referencing
-
-            // Add to candidates list
-            // We store the parsed price for savings calculation later if selected
-            candidates.push({ item, price: itemPrice, savings });
-
-            if (candidates.length >= 3) break; // Collect max 3 candidates
         }
 
         if (candidates.length === 0) {
@@ -178,7 +173,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             console.log(`product: ${JSON.stringify(product)}`)
         }
 
-        bestMatch = selectedCandidate.item;
+        const bestMatch = selectedCandidate.item;
         const finalSavings = selectedCandidate.savings; // Use pre-calculated savings
 
         if (!bestMatch) {

@@ -8,8 +8,20 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 import compareRouter from './routes/compare';
+const whitelist = ['https://make-it-cheaper.vercel.app'];
 
-app.use(cors());
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // origin이 없거나(서버 간 요청), whitelist에 있거나, chrome-extension:// 으로 시작하면 허용
+    if (!origin || whitelist.indexOf(origin) !== -1 || origin.startsWith('chrome-extension://')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/api/compare', compareRouter);
