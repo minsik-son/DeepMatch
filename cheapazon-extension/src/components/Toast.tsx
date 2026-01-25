@@ -50,7 +50,7 @@ const Toast: React.FC<ToastProps> = ({ match, onClose }) => {
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                                 <span className="bg-gradient-to-r from-orange-500 to-red-600 text-transparent bg-clip-text text-xs font-black uppercase tracking-wider">
-                                    Cheapazon Found
+                                    Cheaper Match Found
                                 </span>
                             </div>
 

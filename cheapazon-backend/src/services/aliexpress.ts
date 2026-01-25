@@ -83,7 +83,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         if (products.length === 0) return null;
 
         // --- 3-STAGE FILTERING LOOP (Optimized for Cost & Speed) ---
-        
+
         // Stage 1 & 2: Collect potential candidates with cheap filters first
         const preCandidates = [];
         for (const item of products.slice(0, 20)) {
@@ -115,6 +115,8 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
         // Stage 3: AI Semantic Check in Parallel
         const candidates = [];
+        let highConfidenceMatch = null;
+
         if (preCandidates.length > 0) {
             console.log(`Running AI validation for ${preCandidates.length} potential candidates...`);
 
@@ -129,12 +131,23 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
             // Filter for candidates that passed AI validation
             for (let i = 0; i < preCandidates.length; i++) {
-                if (validationResults[i]) {
-                    console.log(`[Candidate] Semantic Match: ${preCandidates[i].item.product_title.substring(0, 30)}... \n\n`);
-                    candidates.push(preCandidates[i]);
-                    if (candidates.length >= 3) break; // Collect max 3 candidates
+                const { isMatch, confidence } = validationResults[i];
+
+                if (isMatch && confidence > 70) {
+                    const candidate = { ...preCandidates[i], confidence };
+
+                    if (confidence >= 90 && !highConfidenceMatch) {
+                        console.log(`[Short-circuit] High confidence match (${confidence}%): ${candidate.item.product_title.substring(0, 30)}...`);
+                        highConfidenceMatch = candidate;
+                        // We could break here, but we already awaited all results. 
+                        // We will just prioritize this one and skip image verification.
+                    }
+
+                    console.log(`[Candidate] Semantic Match (${confidence}%): ${candidate.item.product_title.substring(0, 30)}... \n\n`);
+                    candidates.push(candidate);
+                    if (candidates.length >= 3 && !highConfidenceMatch) break; // Collect max 3 candidates if no high confidence match
                 } else {
-                    console.log(`[Filter] AI Rejected: ${preCandidates[i].item.product_title.substring(0, 40)}... \n\n`);
+                    console.log(`[Filter] AI Rejected (${confidence}%): ${preCandidates[i].item.product_title.substring(0, 40)}... \n\n`);
                 }
             }
         }
@@ -145,11 +158,11 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             return null;
         }
 
-        // Default to first candidate
-        let selectedCandidate = candidates[0];
+        // Default to first candidate or high confidence match
+        let selectedCandidate = highConfidenceMatch || candidates[0];
 
-        // [Stage 4] Image Verification (If multiple candidates & image available)
-        if (candidates.length > 1 && product.imageUrl) {
+        // [Stage 4] Image Verification (If multiple candidates & image available & NO high confidence match)
+        if (!highConfidenceMatch && candidates.length > 1 && product.imageUrl) {
             console.log(`Comparing images for ${candidates.length} candidates...`);
             const candidatesForGemini = candidates.map(c => ({
                 id: c.item.product_id,
@@ -165,6 +178,8 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
                     console.log(`[Image] Gemini preferred: ${selectedCandidate.item.product_title.substring(0, 30)}...`);
                 }
             }
+        } else if (highConfidenceMatch) {
+            console.log(`[Stage 4] Skipped Image Verification due to high confidence match.`);
         }
         else {
             console.log(`No image verification candidates. ${product.imageUrl}`);

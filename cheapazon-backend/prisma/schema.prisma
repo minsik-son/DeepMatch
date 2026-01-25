@@ -1,0 +1,39 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model SourceProduct {
+  id          String   @id @default(uuid())
+  asin        String   @unique
+  title       String
+  price       Float
+  currency    String
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  matchResult MatchResult?
+}
+
+model MatchResult {
+  id              String   @id @default(uuid())
+  sourceProductId String   @unique
+  sourceProduct   SourceProduct @relation(fields: [sourceProductId], references: [id])
+  
+  aliTitle        String
+  aliPrice        Float
+  aliUrl          String
+  aliImageUrl     String
+  savings         Float
+  currency        String
+  confidence      Int      @default(0) // 0-100
+  
+  lastChecked     DateTime @default(now())
+}

@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { searchAliExpress } from '../services/aliexpress';
 import { AmazonProduct, ComparisonResponse } from '../types';
+import prisma from '../lib/prisma';
 
 const router = express.Router();
 
@@ -13,7 +14,91 @@ router.post('/', async (req: Request, res: Response) => {
             return;
         }
 
+        // 1. Check Cache
+        const cached = await prisma.sourceProduct.findUnique({
+            where: { asin: product.asin },
+            include: { matchResult: true }
+        });
+
+        if (cached && cached.matchResult) {
+            const lastChecked = new Date(cached.matchResult.lastChecked).getTime();
+            const now = new Date().getTime();
+            const hoursDiff = (now - lastChecked) / (1000 * 60 * 60);
+
+            if (hoursDiff < 12) {
+                console.log(`[Cache Hit] Returning cached result for ${product.asin}`);
+                const response: ComparisonResponse = {
+                    found: true,
+                    match: {
+                        aliTitle: cached.matchResult.aliTitle,
+                        aliPrice: cached.matchResult.aliPrice,
+                        shipping: 0, // Simplified or stored
+                        currency: cached.matchResult.currency as 'USD' | 'CAD',
+                        savings: cached.matchResult.savings,
+                        affiliateUrl: cached.matchResult.aliUrl,
+                        imageUrl: cached.matchResult.aliImageUrl
+                    }
+                };
+                res.json(response);
+                return;
+            }
+            console.log(`[Cache Stale] Expired ${hoursDiff.toFixed(1)} hours ago for ${product.asin}`);
+        } else {
+            console.log(`[Cache Miss] No entry for ${product.asin}`);
+        }
+
+        // 2. Search AliExpress (Real API Call)
         const match = await searchAliExpress(product);
+
+        // 3. Update Cache
+        if (match) {
+            await prisma.sourceProduct.upsert({
+                where: { asin: product.asin },
+                update: {
+                    price: product.price,
+                    matchResult: {
+                        upsert: {
+                            create: {
+                                aliTitle: match.aliTitle,
+                                aliPrice: match.aliPrice,
+                                aliUrl: match.affiliateUrl,
+                                aliImageUrl: match.imageUrl,
+                                savings: match.savings,
+                                currency: match.currency,
+                                lastChecked: new Date()
+                                // confidence will be added later
+                            },
+                            update: {
+                                aliTitle: match.aliTitle,
+                                aliPrice: match.aliPrice,
+                                aliUrl: match.affiliateUrl,
+                                aliImageUrl: match.imageUrl,
+                                savings: match.savings,
+                                currency: match.currency,
+                                lastChecked: new Date()
+                            }
+                        }
+                    }
+                },
+                create: {
+                    asin: product.asin,
+                    title: product.title,
+                    price: product.price,
+                    currency: product.currency,
+                    imageUrl: product.imageUrl,
+                    matchResult: {
+                        create: {
+                            aliTitle: match.aliTitle,
+                            aliPrice: match.aliPrice,
+                            aliUrl: match.affiliateUrl,
+                            aliImageUrl: match.imageUrl,
+                            savings: match.savings,
+                            currency: match.currency
+                        }
+                    }
+                }
+            });
+        }
 
         const response: ComparisonResponse = {
             found: !!match,

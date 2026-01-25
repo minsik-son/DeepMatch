@@ -21,3 +21,5 @@ lerna-debug.log*
 .DS_Store
 .npm
 .eslintcache
+
+/generated/prisma

@@ -7,7 +7,18 @@ import '../style.css';
 
 console.log('Cheapazon Content Script Loaded');
 
-const init = async () => {
+// Simple debounce utility type
+type DebouncedFunction<T extends (...args: any[]) => any> = (...args: Parameters<T>) => void;
+
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): DebouncedFunction<T> {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+}
+
+const runAnalysis = async () => {
     const hostname = window.location.hostname;
     const currency = getCurrencyFromDomain(hostname);
     console.log(`Detected Currency: ${currency}`);
@@ -45,6 +56,11 @@ const init = async () => {
         }
     });
 };
+
+const init = debounce(() => {
+    console.log('Debounced init: Starting analysis...');
+    runAnalysis();
+}, 1000); // Wait 1s after load before running
 
 const showToast = (match: any) => {
     // Create container for Shadow DOM
