@@ -11,7 +11,8 @@ import compareRouter from './routes/compare';
 const whitelist = [
   'https://make-it-cheaper.vercel.app',
   'https://make-it-cheaper-git-featur-5ccc15-minsik-sons-projects-d87de25c.vercel.app',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'chrome-extension://kcgkbfchonnemoehcooaojbmhnecgghk'
 ];
 
 const corsOptions: cors.CorsOptions = {
@@ -20,23 +21,29 @@ const corsOptions: cors.CorsOptions = {
     // 2. 크롬 익스텐션 요청이거나
     // 3. whitelist에 포함되어 있거나
     // 4. Vercel 프리뷰 주소 (*.vercel.app) 인 경우 허용
+    const isExtension = origin && origin.startsWith('chrome-extension://');
+    const isWhitelisted = origin && whitelist.indexOf(origin) !== -1;
+    const isVercelPreview = origin && origin.endsWith('.vercel.app');
+
     if (
       !origin ||
-      origin.startsWith('chrome-extension://') ||
-      whitelist.indexOf(origin) !== -1 ||
-      origin.endsWith('.vercel.app')
+      isExtension ||
+      isWhitelisted ||
+      isVercelPreview
     ) {
       callback(null, true);
     } else {
+      console.error('CORS blocked:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // 인증 관련 헤더 허용 (필요시)
-  methods: ['GET', 'POST', 'OPTIONS'], // 필요한 메서드 명시
-  allowedHeaders: ['Content-Type', 'Authorization']
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Explicitly handle preflight requests
 app.use(express.json());
 
 app.use('/api/compare', compareRouter);
