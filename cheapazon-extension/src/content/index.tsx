@@ -5,7 +5,7 @@ import { getProductDetails } from '../utils/scraper';
 import Toast from '../components/Toast';
 import '../style.css';
 
-console.log('Cheapazon Content Script Loaded');
+console.log('MakeItCheaper Content Script Loaded');
 
 // Simple debounce utility type
 type DebouncedFunction<T extends (...args: any[]) => any> = (...args: Parameters<T>) => void;
