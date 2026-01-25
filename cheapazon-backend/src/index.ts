@@ -15,6 +15,12 @@ const whitelist = [
   'chrome-extension://kcgkbfchonnemoehcooaojbmhnecgghk'
 ];
 
+// Request Logger Middleware
+app.use((req, res, next) => {
+  console.log(`[Request] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No Origin'}`);
+  next();
+});
+
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     // 1. origin이 없거나 (서버 간 통신)
@@ -25,6 +31,11 @@ const corsOptions: cors.CorsOptions = {
     const isWhitelisted = origin && whitelist.indexOf(origin) !== -1;
     const isVercelPreview = origin && origin.endsWith('.vercel.app');
 
+    // Log the decision factors for Vercel logs
+    if (origin && !isExtension && !isWhitelisted && !isVercelPreview) {
+      console.log(`[CORS Block Candidate] Origin: ${origin}`);
+    }
+
     if (
       !origin ||
       isExtension ||
@@ -33,8 +44,8 @@ const corsOptions: cors.CorsOptions = {
     ) {
       callback(null, true);
     } else {
-      console.error('CORS blocked:', origin);
-      callback(new Error('Not allowed by CORS'));
+      console.error(`[CORS Blocked] Origin: ${origin}`);
+      callback(new Error(`CORS blocked for origin: ${origin}`));
     }
   },
   credentials: true,
@@ -43,7 +54,9 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Explicitly handle preflight requests
+// Remove redundant app.options('*') unless specifically needed, cors middleware handles it usually.
+// app.options('*', cors(corsOptions)); 
+
 app.use(express.json());
 
 app.use('/api/compare', compareRouter);
@@ -51,6 +64,25 @@ app.use('/api/compare', compareRouter);
 app.get('/', (req, res) => {
   res.send('MakeItCheaper Backend is running');
 });
+
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Global Error Handler]', err);
+
+  if (err.message && err.message.includes('CORS blocked')) {
+    res.status(403).json({
+      error: 'CORS Policy Violation',
+      message: err.message
+    });
+    return; // Explicit return void
+  }
+
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
+
 // Export for Vercel
 export default app;
 
