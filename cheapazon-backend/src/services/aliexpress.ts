@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { AmazonProduct, AliExpressProduct } from '../types';
 import { extractKeywords, validateProductMatch, compareProductImages } from './gemini';
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config();     
 
 const API_GATEWAY = 'https://api-sg.aliexpress.com/sync';
 
