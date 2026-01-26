@@ -17,13 +17,21 @@ const whitelist = [
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // origin이 없거나(서버 간 요청), whitelist에 있거나, chrome-extension:// 으로 시작하면 허용
+    // 백엔드로 들어오는 모든 Origin 값을 Vercel 로그에 출력합니다.
+    console.log("DEBUG: Incoming Request Origin ->", origin);
+
     if (!origin || whitelist.indexOf(origin) !== -1 || origin.startsWith('chrome-extension://')) {
+      console.log("DEBUG: CORS Allowed for ->", origin);
       callback(null, true);
     } else {
+      console.log("DEBUG: CORS Rejected for ->", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
+  // Preflight 요청이 제대로 처리되도록 메서드와 헤더를 명시합니다.
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
