@@ -1,3 +1,4 @@
+/*
 import express, { Request, Response } from 'express';
 import { searchAliExpress } from '../services/aliexpress';
 import { AmazonProduct, ComparisonResponse } from '../types';
@@ -14,6 +15,7 @@ router.post('/', async (req: Request, res: Response) => {
             res.status(400).json({ error: 'Invalid product data' });
             return;
         }
+            */
 
         // --- SUPABASE CACHE LOGIC DISABLED ---
         /*
@@ -56,7 +58,7 @@ router.post('/', async (req: Request, res: Response) => {
         console.log(`[Cache] MISS for ASIN: ${product.asin}`);
         */
         // --- END OF DISABLED LOGIC ---
-
+/*
         const match = await searchAliExpress(product);
 
         const response: ComparisonResponse = {
@@ -72,8 +74,10 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 export default router;
+*/
 
-/*
+
+
 import express, { Request, Response } from 'express';
 import { searchAliExpress } from '../services/aliexpress';
 import { AmazonProduct, ComparisonResponse } from '../types';
@@ -189,4 +193,3 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 export default router;
-*/
