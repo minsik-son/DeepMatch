@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { AmazonProduct, AliExpressProduct } from '../types';
 import { extractKeywords, validateProductMatch, compareProductImages } from './gemini';
 import dotenv from 'dotenv';
-dotenv.config();     
+dotenv.config();
 
 const API_GATEWAY = 'https://api-sg.aliexpress.com/sync';
 
@@ -14,6 +14,58 @@ const generateSignature = (params: Record<string, string>, secret: string) => {
         query += key + params[key];
     }
     return crypto.createHmac('sha256', secret).update(query).digest('hex').toUpperCase();
+};
+
+export const getAliExpressProductDetails = async (aliProductId: string, currency: string): Promise<AliExpressProduct | null> => {
+    const APP_KEY = process.env.ALI_APP_KEY;
+    const APP_SECRET = process.env.ALI_APP_SECRET;
+    const TRACKING_ID = process.env.ALI_TRACKING_ID;
+
+    if (!APP_KEY || !APP_SECRET || !TRACKING_ID) return null;
+
+    const timestamp = Date.now().toString();
+    const params: Record<string, string> = {
+        'app_key': APP_KEY,
+        'timestamp': timestamp,
+        'sign_method': 'sha256',
+        'method': 'aliexpress.affiliate.product.detail.get',
+        'v': '2.0',
+        'product_ids': aliProductId,
+        'target_currency': currency,
+        'target_language': 'EN',
+        'tracking_id': TRACKING_ID
+    };
+
+    const sign = generateSignature(params, APP_SECRET);
+    params['sign'] = sign;
+
+    try {
+        const response = await axios.post(API_GATEWAY, new URLSearchParams(params), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' }
+        });
+
+        const result = response.data.aliexpress_affiliate_product_detail_get_response;
+        if (!result || !result.resp_result || !result.resp_result.result || !result.resp_result.result.products) {
+            return null;
+        }
+
+        const product = result.resp_result.result.products.product[0];
+        if (!product) return null;
+
+        return {
+            aliTitle: product.product_title,
+            aliPrice: parseFloat(product.target_sale_price),
+            shipping: 0,
+            currency: product.target_sale_price_currency as 'USD' | 'CAD',
+            savings: 0, // Calculated by caller
+            affiliateUrl: product.promotion_link,
+            imageUrl: product.product_main_image_url,
+            aliProductId: product.product_id
+        };
+    } catch (error) {
+        console.error('Error fetching AliExpress details:', error);
+        return null;
+    }
 };
 
 export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpressProduct | null> => {
@@ -206,7 +258,8 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             currency: bestMatch.target_sale_price_currency,
             savings: finalSavings,
             affiliateUrl: bestMatch.promotion_link,
-            imageUrl: bestMatch.product_main_image_url
+            imageUrl: bestMatch.product_main_image_url,
+            aliProductId: bestMatch.product_id
         };
 
     } catch (error) {

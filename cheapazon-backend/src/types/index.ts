@@ -15,6 +15,7 @@ export interface AliExpressProduct {
     savings: number;
     affiliateUrl: string;
     imageUrl: string;
+    aliProductId?: string; // Optional for backward compatibility, but strictly needed for optim
 }
 
 export interface ComparisonResponse {

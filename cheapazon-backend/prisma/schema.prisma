@@ -34,6 +34,7 @@ model MatchResult {
   aliImageUrl     String
   savings         Float
   currency        String
+  aliProductId    String?  // Added for direct price refresh
   confidence      Int      @default(0) // 0-100
   
   lastChecked     DateTime @default(now())

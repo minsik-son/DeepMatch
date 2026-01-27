@@ -40,10 +40,10 @@ app.use(express.json());
 app.use('/api/compare', compareRouter);
 
 app.get('/', (req, res) => {
+  // 현재 어떤 Origin이 헤더에 들어왔는지 출력
+  console.log("Request Method:", req.method);
+  console.log("Request Origin Header:", req.headers.origin);
   res.send('MakeItCheaper Backend is running');
-    console.log("CORS : ", corsOptions);
-    console.log("Whitelist : ", whitelist);
-    console.log("Origin : ", req.headers.origin);
 });
 
 // Export for Vercel
