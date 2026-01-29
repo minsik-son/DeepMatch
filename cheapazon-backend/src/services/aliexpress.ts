@@ -45,6 +45,7 @@ export const getAliExpressProductDetails = async (aliProductId: string, currency
             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' }
         });
 
+        // 로그를 위한 data
         const data = response.data;
 
         // --- 여기서부터 로그 추가 ---
