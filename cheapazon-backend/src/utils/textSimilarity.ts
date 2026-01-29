@@ -1,4 +1,4 @@
-import { distance } from 'fastest-levenshtein';
+
 
 /**
  * Global Brand List (Curated top 50)
@@ -47,8 +47,10 @@ export function cleanTitle(title: string): string {
 }
 
 /**
- * Calculate text similarity score (0 to 1)
- * Combines Levenshtein distance (30%) and Token Overlap (70%)
+ * Calculate text similarity score (0 to 1) using Overlap Coefficient.
+ * Formula: Intersection(A, B) / Min(|A|, |B|)
+ * This ensures that if all Amazon keywords (A) are present in the AliExpress title (B),
+ * the score is 1.0, regardless of how long B is.
  */
 export function getTextSimilarity(titleA: string, titleB: string): number {
     const cleanA = cleanTitle(titleA);
@@ -56,23 +58,22 @@ export function getTextSimilarity(titleA: string, titleB: string): number {
 
     if (!cleanA || !cleanB) return 0;
 
-    // Method 1: Levenshtein Distance
-    const maxLen = Math.max(cleanA.length, cleanB.length);
-    const distanceVal = distance(cleanA, cleanB);
-    const levenScore = maxLen > 0 ? 1 - (distanceVal / maxLen) : 0;
+    // Tokenize and filter short words
+    const tokensA = new Set(cleanA.split(/\s+/).filter(w => w.length >= 2));
+    const tokensB = new Set(cleanB.split(/\s+/).filter(w => w.length >= 2));
 
-    // Method 2: Token Overlap (Set Intersection)
-    const tokensA = new Set(cleanA.split(/\s+/).filter(w => w.length > 2));
-    const tokensB = new Set(cleanB.split(/\s+/).filter(w => w.length > 2));
+    if (tokensA.size === 0 || tokensB.size === 0) return 0;
 
+    // Calculate Intersection
     let intersection = 0;
     tokensA.forEach(token => {
         if (tokensB.has(token)) intersection++;
     });
 
-    const union = new Set([...tokensA, ...tokensB]).size;
-    const tokenScore = union > 0 ? intersection / union : 0;
+    // Overlap Coefficient: Intersection / Min(|A|, |B|)
+    // We typically expect Amazon title (A) to be the "Query" and Ali (B) to be the "Document".
+    // Using Math.min ensures that if A is a subset of B, score is 1.
+    const minSize = Math.min(tokensA.size, tokensB.size);
 
-    // Weighted Average (Tokens are more important as word order matters less)
-    return levenScore * 0.3 + tokenScore * 0.7;
+    return minSize > 0 ? intersection / minSize : 0;
 }

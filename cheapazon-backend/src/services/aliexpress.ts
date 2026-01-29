@@ -173,7 +173,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         const textFilteredCandidates = [];
 
         for (const candidate of preCandidates) {
-            const textScore = calculateTextScore(product.title, candidate.item.product_title);
+            const textScore = calculateTextScore(searchKeywords, candidate.item.product_title);
 
             if (textScore >= 0.75) {
                 textFilteredCandidates.push({
