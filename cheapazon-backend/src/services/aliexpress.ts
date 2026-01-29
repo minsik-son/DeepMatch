@@ -2,7 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { AmazonProduct, AliExpressProduct } from '../types';
 import { extractKeywords, validateProductMatch, compareProductImages } from './gemini';
-import { calculateLocalScore } from './scoring';
+import { calculateLocalScore, calculateTextScore, calculateImageScore } from './scoring';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -139,7 +139,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
         // Stage 1 & 2: Collect potential candidates with cheap filters first
         const preCandidates = [];
-        for (const item of products.slice(0, 20)) {
+        for (const item of products.slice(0, 40)) { // Increased slice to check more initial candidates
             const itemPrice = parseFloat(item.target_sale_price);
             const savings = numericPrice - itemPrice;
 
@@ -162,146 +162,87 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
             }
             if (isAccessory) continue;
 
-            // If it passes all cheap filters, add to pre-candidates for expensive AI check
+            // If it passes all cheap filters, add to pre-candidates
             preCandidates.push({ item, price: itemPrice, savings });
         }
 
-        // Stage 3: AI Semantic Check in Parallel (with Fast-Pass)
-        const candidates = [];
-        let highConfidenceMatch = null;
+        // New Stage 3: Two-Stage Waterfall Matching Logic
+        console.log(`[Stage 3] Waterfall Matching for ${preCandidates.length} candidates...`);
 
-        if (preCandidates.length > 0) {
-            console.log(`[Stage 2.5] Running Fast-Pass scoring for ${preCandidates.length} candidates...`);
+        // Step A: Text Similarity Filter (>= 0.75)
+        const textFilteredCandidates = [];
 
-            // 1. Run Local Scoring on all pre-candidates
-            const scoringPromises = preCandidates.map(p =>
-                calculateLocalScore({
-                    amazonTitle: product.title,
-                    amazonImageUrl: product.imageUrl || '',
-                    aliTitle: p.item.product_title,
-                    aliImageUrl: p.item.product_main_image_url
-                })
-            );
+        for (const candidate of preCandidates) {
+            const textScore = calculateTextScore(product.title, candidate.item.product_title);
 
-            const scoringResults = await Promise.all(scoringPromises);
-
-            const fastPassCandidates = [];
-            const aiVerifyCandidates = [];
-
-            // 2. Sort candidates into buckets based on score
-            for (let i = 0; i < preCandidates.length; i++) {
-                const scoring = scoringResults[i];
-                const preCandidate = preCandidates[i];
-
-                if (scoring.decision === 'fast-pass') {
-                    // >= 88: High confidence, skip AI
-                    fastPassCandidates.push({
-                        ...preCandidate,
-                        confidence: Math.round(scoring.finalScore),
-                        fastPass: true
-                    });
-                    console.log(`[Fast-Pass ✓] Score ${scoring.finalScore.toFixed(1)} | ${preCandidate.item.product_title.substring(0, 40)}...`);
-                } else if (scoring.decision === 'ai-verify') {
-                    // 70 <= Score < 88: Needs AI verification
-                    aiVerifyCandidates.push(preCandidate);
-                } else {
-                    // < 70: Reject
-                    console.log(`[Reject X] Score ${scoring.finalScore.toFixed(1)} | ${preCandidate.item.product_title}`);
-                }
-            }
-
-            // 3. Process Fast-Pass Matches (Immediate Success)
-            if (fastPassCandidates.length > 0) {
-                // Determine savings for reporting?
-                console.log(`[SUCCESS] ${fastPassCandidates.length} Fast-Pass matches found. AI calls saved: ${aiVerifyCandidates.length}`);
-
-                // Sort by score descending
-                fastPassCandidates.sort((a, b) => b.confidence - a.confidence);
-
-                candidates.push(...fastPassCandidates.slice(0, 3));
-                highConfidenceMatch = fastPassCandidates[0];
-            }
-
-            // 4. Process AI-Verify Matches (Only if needed)
-            // If we have a high confidence match from Fast-Pass, we might skip this.
-            // But usually, we might want to check if AI finds something *better*? 
-            // The prompt says "88점 이상 → AI 검증 완전 스킵", so we skip if we have ANY fast-pass match?
-            // "Fast-Pass 매치가 있으면 즉시 반환 (AI 호출 완전 스킵)" -> Yes, skip AI calls entirely if fast-pass found.
-
-            if (!highConfidenceMatch && aiVerifyCandidates.length > 0) {
-                console.log(`[Stage 3] Running AI validation for ${aiVerifyCandidates.length} candidates...`);
-
-                const validationPromises = aiVerifyCandidates.map(p => {
-                    const priceRatio = p.price / numericPrice;
-                    return validateProductMatch(product.title, p.item.product_title, priceRatio);
+            if (textScore >= 0.75) {
+                textFilteredCandidates.push({
+                    ...candidate,
+                    textScore
                 });
+                console.log(`[Text Pass] Score: ${textScore.toFixed(2)} | ${candidate.item.product_title.substring(0, 40)}...`);
+            } else {
+                // Log rejected for debugging if needed, but keep it quiet usually
+                console.log(`[Text Reject] Score: ${textScore.toFixed(2)} | ${candidate.item.product_title}\n`);
 
-                const validationResults = await Promise.all(validationPromises);
-
-                for (let i = 0; i < aiVerifyCandidates.length; i++) {
-                    const { isMatch, confidence } = validationResults[i];
-
-                    if (isMatch && confidence > 70) {
-                        const candidate = { ...aiVerifyCandidates[i], confidence, fastPass: false };
-
-                        if (confidence >= 90 && !highConfidenceMatch) {
-                            console.log(`[AI High Confidence] ${confidence}%: ${candidate.item.product_title.substring(0, 30)}...`);
-                            highConfidenceMatch = candidate;
-                        }
-
-                        console.log(`[AI Verified ✓] ${confidence}%: ${candidate.item.product_title.substring(0, 30)}...`);
-                        candidates.push(candidate);
-                        if (candidates.length >= 3 && !highConfidenceMatch) break;
-                    } else {
-                        console.log(`[AI Rejected ✗] ${confidence}%: ${aiVerifyCandidates[i].item.product_title.substring(0, 40)}...`);
-                    }
-                }
             }
         }
 
-        if (candidates.length === 0) {
-            console.log('No valid match found after validation.');
+        if (textFilteredCandidates.length === 0) {
+            console.log('No candidates passed Text Similarity filter (>= 0.75).');
             return null;
         }
 
-        // Default to first candidate or high confidence match
-        let selectedCandidate = highConfidenceMatch || candidates[0];
+        console.log(`[Stage 3.5] Calculating Image Similarity for ${textFilteredCandidates.length} survivors...`);
 
-        // [Stage 4] Image Verification (If multiple candidates & image available & NO high confidence match)
-        if (!highConfidenceMatch && candidates.length > 1 && product.imageUrl) {
-            console.log(`Comparing images for ${candidates.length} candidates...`);
-            const candidatesForGemini = candidates.map(c => ({
-                id: c.item.product_id,
-                imageUrl: c.item.product_main_image_url,
-                title: c.item.product_title
-            }));
+        // Step B: Image Similarity Ranking
+        // Calculate image scores in parallel
+        const scoredCandidates = await Promise.all(textFilteredCandidates.map(async (candidate) => {
+            const imageScore = await calculateImageScore(
+                product.imageUrl || '',
+                candidate.item.product_main_image_url
+            );
+            return {
+                ...candidate,
+                imageScore
+            };
+        }));
 
-            const bestId = await compareProductImages(product.imageUrl, candidatesForGemini);
-            if (bestId) {
-                const found = candidates.find(c => c.item.product_id === bestId);
-                if (found) {
-                    selectedCandidate = found;
-                    console.log(`[Image] Gemini preferred: ${selectedCandidate.item.product_title.substring(0, 30)}...`);
+        // Step C: Sort & Select
+        // Sort by Image Similarity (Descending). If Image Score is similar or 0, use Text Score as tie breaker.
+        scoredCandidates.sort((a, b) => {
+            // If both have valid image scores, prioritize image score
+            if (a.imageScore > 0 || b.imageScore > 0) {
+                // Sort descending
+                if (b.imageScore !== a.imageScore) {
+                    return b.imageScore - a.imageScore;
                 }
             }
-        } else if (highConfidenceMatch) {
-            console.log(`[Stage 4] Skipped Image Verification due to high confidence match.`);
-        }
-        else {
-            console.log(`No image verification candidates. ${product.imageUrl}`);
-            console.log(`candidates: ${JSON.stringify(candidates)}`);
-            console.log('---------------------------------------------');
-            console.log(`product: ${JSON.stringify(product)}`)
-        }
+            // Tie-breaker or fallback: Text Score
+            return b.textScore - a.textScore;
+        });
 
-        const bestMatch = selectedCandidate.item;
-        const finalSavings = selectedCandidate.savings; // Use pre-calculated savings
+        // Log the ranking
+        scoredCandidates.forEach((c, idx) => {
+            console.log(`#${idx + 1} Image: ${c.imageScore.toFixed(2)} | Text: ${c.textScore.toFixed(2)} | ${c.item.product_title.substring(0, 30)}...`);
+        });
 
-        if (!bestMatch) {
-            console.log('No valid match found after validation.');
-            console.log('---------------------------------------------');
+        // Select the top candidate
+        const bestCandidate = scoredCandidates[0];
+
+        // Optional: If the best candidate has very low image score (e.g. 0 because of failure) 
+        // AND text score is just bare minimum, we might still want to be careful?
+        // But requirements said "If NO candidates pass the text threshold, return null". 
+        // We already did that. So we return the best of what's left.
+
+        if (!bestCandidate) {
             return null;
         }
+
+        console.log(`[Selected] Image: ${bestCandidate.imageScore.toFixed(2)} (Text: ${bestCandidate.textScore.toFixed(2)}) - ${bestCandidate.item.product_title}`);
+
+        const bestMatch = bestCandidate.item;
+        const finalSavings = bestCandidate.savings;
 
         const aliPrice = parseFloat(bestMatch.target_sale_price);
 
