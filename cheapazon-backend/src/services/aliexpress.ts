@@ -45,6 +45,22 @@ export const getAliExpressProductDetails = async (aliProductId: string, currency
             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' }
         });
 
+        const data = response.data;
+
+        // --- 여기서부터 로그 추가 ---
+        console.log("==== AliExpress Raw Search Results ====");
+        const rawProducts = data.aliexpress_affiliate_product_query_response?.resp_result?.result?.products?.product;
+        if (rawProducts) {
+            console.log(`Total items received: ${rawProducts.length}`);
+            rawProducts.forEach((p: any, i: number) => {
+                console.log(`[${i + 1}] ID: ${p.product_id} | Title: ${p.product_title} | Price: ${p.target_sale_price}`);
+            });
+        } else {
+            console.log("No products found in the raw API response.");
+        }
+        console.log("========================================");
+        // --- 여기까지 로그 추가 ---
+
         const result = response.data.aliexpress_affiliate_product_detail_get_response;
         if (!result || !result.resp_result || !result.resp_result.result || !result.resp_result.result.products) {
             return null;
