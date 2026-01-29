@@ -137,59 +137,78 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
         // --- 3-STAGE FILTERING LOOP (Optimized for Cost & Speed) ---
 
-        // Stage 1 & 2: Collect potential candidates with cheap filters first
+        const rejections: { title: string, price: number, reason: string }[] = [];
         const preCandidates = [];
-        for (const item of products.slice(0, 40)) { // Increased slice to check more initial candidates
+        for (const item of products.slice(0, 40)) {
             const itemPrice = parseFloat(item.target_sale_price);
             const savings = numericPrice - itemPrice;
 
             // Price Cut Filter
-            if (savings <= 0) continue;
+            if (savings <= 0) {
+                rejections.push({ title: item.product_title, price: itemPrice, reason: `Price too high (${itemPrice} vs Amazon ${numericPrice})` });
+                continue;
+            }
 
             // Suspiciously Cheap Filter
-            if (itemPrice < numericPrice * 0.3) continue;
+            if (itemPrice < numericPrice * 0.3) {
+                rejections.push({ title: item.product_title, price: itemPrice, reason: `Suspiciously cheap (${itemPrice} < 30% of ${numericPrice})` });
+                continue;
+            }
 
             // Negative Keyword Filter
             const negativeKeywords = ['case', 'cover', 'glass', 'film', 'strap', 'band', 'stand', 'holder', 'part', 'replacement', 'battery'];
             const amzLower = product.title.toLowerCase();
             const aliLower = item.product_title.toLowerCase();
             let isAccessory = false;
+            let caughtNeg = '';
             for (const neg of negativeKeywords) {
                 if (aliLower.includes(neg) && !amzLower.includes(neg)) {
                     isAccessory = true;
+                    caughtNeg = neg;
                     break;
                 }
             }
-            if (isAccessory) continue;
+            if (isAccessory) {
+                rejections.push({ title: item.product_title, price: itemPrice, reason: `Accessory filter (${caughtNeg})` });
+                continue;
+            }
 
             // If it passes all cheap filters, add to pre-candidates
             preCandidates.push({ item, price: itemPrice, savings });
         }
 
         // New Stage 3: Two-Stage Waterfall Matching Logic
-        console.log(`[Stage 3] Waterfall Matching for ${preCandidates.length} candidates...`);
+        console.log(`[Stage 3] Waterfall Matching for ${preCandidates.length} potential candidates...`);
 
-        // Step A: Text Similarity Filter (>= 0.75)
+        // Step A: Text Similarity Filter (>= 0.55)
         const textFilteredCandidates = [];
+        const THRESHOLD = 0.55;
 
         for (const candidate of preCandidates) {
             const textScore = calculateTextScore(searchKeywords, candidate.item.product_title);
 
-            if (textScore >= 0.55) {
+            if (textScore >= THRESHOLD) {
                 textFilteredCandidates.push({
                     ...candidate,
                     textScore
                 });
                 console.log(`[Text Pass] Score: ${textScore.toFixed(2)} | ${candidate.item.product_title.substring(0, 40)}...`);
             } else {
-                // Log rejected for debugging if needed, but keep it quiet usually
+                rejections.push({
+                    title: candidate.item.product_title,
+                    price: candidate.price,
+                    reason: `Low Text similarity (${textScore.toFixed(2)} < ${THRESHOLD})`
+                });
                 console.log(`[Text Reject] Score: ${textScore.toFixed(2)} | ${candidate.item.product_title}\n`);
-
             }
         }
 
         if (textFilteredCandidates.length === 0) {
-            console.log('No candidates passed Text Similarity filter (>= 0.75).');
+            console.log(`No candidates passed Text Similarity filter (>= ${THRESHOLD}).`);
+            console.log('--- Full Rejection List ---');
+            rejections.forEach((r, i) => {
+                console.log(`${i + 1}. [${r.reason}] ${r.title} (${r.price})`);
+            });
             return null;
         }
 
@@ -230,12 +249,8 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         // Select the top candidate
         const bestCandidate = scoredCandidates[0];
 
-        // Optional: If the best candidate has very low image score (e.g. 0 because of failure) 
-        // AND text score is just bare minimum, we might still want to be careful?
-        // But requirements said "If NO candidates pass the text threshold, return null". 
-        // We already did that. So we return the best of what's left.
-
         if (!bestCandidate) {
+            console.log('No best candidate found after ranking.');
             return null;
         }
 
@@ -243,7 +258,6 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
 
         const bestMatch = bestCandidate.item;
         const finalSavings = bestCandidate.savings;
-
         const aliPrice = parseFloat(bestMatch.target_sale_price);
 
         return {
