@@ -194,7 +194,7 @@ router.post('/', async (req: Request, res: Response) => {
                         // If it WAS a match but now isn't, we should probably delete matchResult.
                     }
                 });
-                // Explicitly delete matchResult if we want to enforce "No Match" state
+                // Optionally delete matchResult if we want to enforce "No Match" state
                 // await prisma.matchResult.delete({ where: { sourceProductId: existing.id } }).catch(() => {});
             } else {
                 await prisma.sourceProduct.create({
@@ -204,7 +204,7 @@ router.post('/', async (req: Request, res: Response) => {
                         price: product.price,
                         currency: product.currency,
                         imageUrl: product.imageUrl,
-                        updatedAt: new Date() // Sets the "negative cache" timer
+                        updatedAt: new Date() // Sets the "negative cache" expiration timer
                     }
                 });
             }

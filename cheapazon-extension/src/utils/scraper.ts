@@ -15,7 +15,7 @@ export const cleanTitle = (title: string): string => {
 
 export const getProductDetails = (): ProductDetails | null => {
     try {
-        // const asinMatch = window.location.pathname.match(/\/dp\/([A-Z0-9]{10})/);
+        // Match Amazon ASIN from various URL formats
         const asinMatch = window.location.pathname.match(/(?:\/dp\/|\/gp\/aw\/d\/|\/product\/)([A-Z0-9]{10})/);
         const asin = asinMatch ? asinMatch[1] : '';
 

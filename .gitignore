@@ -31,7 +31,7 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# 이미지
+# Images
 Image/
 **/Image/
 

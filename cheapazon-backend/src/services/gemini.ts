@@ -163,7 +163,7 @@ export const validateProductMatch = async (amazonTitle: string, aliTitle: string
             generationConfig: { responseMimeType: "application/json" }
         });
 
-        // 프롬프트 수정: 불필요한 설명 제거 및 JSON 스키마 명확화
+        // Update prompt: Remove unnecessary descriptions and clarify JSON schema
         const prompt = `
         You are a strict e-commerce validation bot.
         Determine if these two product titles refer to the SAME core product category and type.
@@ -190,10 +190,10 @@ export const validateProductMatch = async (amazonTitle: string, aliTitle: string
         const result = await model.generateContent(prompt);
         let text = result.response.text();
 
-        // 안전장치: 마크다운 코드 블록 제거 및 공백 제거
+        // Safety: Remove markdown code blocks and trim whitespace
         text = text.replace(/```json|```/g, '').trim();
 
-        console.log(`[DEBUG] Gemini Raw Response: ${text}`); // 이 로그를 통해 실제 응답 확인 가능
+        console.log(`[DEBUG] Gemini Raw Response: ${text}`); // Debug log to verify actual response
 
         let json;
         try {
@@ -203,7 +203,7 @@ export const validateProductMatch = async (amazonTitle: string, aliTitle: string
             return { isMatch: false, confidence: 0 };
         }
 
-        // 키값 대소문자 방어 로직 (가끔 대문자로 줄 때가 있음)
+        // Handle key case sensitivity (AI sometimes returns uppercase keys)
         const isMatchRaw = json.match ?? json.Match ?? false;
         const confidenceRaw = json.confidence ?? json.Confidence ?? 0;
 
@@ -216,7 +216,7 @@ export const validateProductMatch = async (amazonTitle: string, aliTitle: string
 
     } catch (error) {
         console.error('Gemini Validation Error:', error);
-        return { isMatch: true, confidence: 50 }; // 에러 시 기본값
+        return { isMatch: true, confidence: 50 }; // Default value on error
     }
 };
 async function urlToGenerativePart(url: string) {

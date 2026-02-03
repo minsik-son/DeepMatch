@@ -60,7 +60,7 @@ export const getAliExpressProductDetails = async (aliProductId: string, currency
             console.log("No products found in the raw API response.");
         }
         console.log("========================================");
-        // --- 여기까지 로그 추가 ---
+        // --- API Response Logging End ---
 
         const result = response.data.aliexpress_affiliate_product_detail_get_response;
         if (!result || !result.resp_result || !result.resp_result.result || !result.resp_result.result.products) {
@@ -124,7 +124,7 @@ export const searchAliExpress = async (product: AmazonProduct): Promise<AliExpre
         'target_currency': product.currency,
         'target_language': 'EN',
         'tracking_id': TRACKING_ID,
-        'page_size': '40' // 넉넉하게 가져와서 앞에서부터 거름
+        'page_size': '40' // Fetch a generous amount to filter further in subsequent stages
     };
 
     const sign = generateSignature(params, APP_SECRET);
