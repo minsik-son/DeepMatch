@@ -19,7 +19,7 @@ const whitelist = [
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // 백엔드로 들어오는 모든 Origin 값을 Vercel 로그에 출력합니다.
+    // Log all incoming Origin values to Vercel for debugging.
     console.log("DEBUG: Incoming Request Origin ->", origin);
 
     if (!origin || whitelist.indexOf(origin) !== -1 || origin.startsWith('chrome-extension://')) {
@@ -45,7 +45,7 @@ app.get('/', (req, res) => {
   // 현재 어떤 Origin이 헤더에 들어왔는지 출력
   console.log("Request Method:", req.method);
   console.log("Request Origin Header:", req.headers.origin);
-  res.send('MakeItCheaper Backend is running');
+  res.send('Deep Match Backend is running');
 });
 
 // Export for Vercel

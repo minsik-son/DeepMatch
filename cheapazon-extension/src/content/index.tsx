@@ -5,7 +5,7 @@ import { getProductDetails } from '../utils/scraper';
 import Toast from '../components/Toast';
 import '../style.css';
 
-console.log('MakeItCheaper Content Script Loaded');
+console.log('Deep Match Content Script Loaded');
 
 // Simple debounce utility type
 type DebouncedFunction<T extends (...args: any[]) => any> = (...args: Parameters<T>) => void;
@@ -65,7 +65,7 @@ const init = debounce(() => {
 const showToast = (match: any) => {
     // Create container for Shadow DOM
     const container = document.createElement('div');
-    container.id = 'cheapazon-root';
+    container.id = 'deep-match-root';
     container.style.position = 'fixed';
     container.style.zIndex = '99999';
     container.style.top = '16px';
@@ -85,10 +85,10 @@ const showToast = (match: any) => {
         .then(response => response.text())
         .then(css => {
             styleElement.textContent = css;
-            console.log('Cheapazon CSS Injected');
+            console.log('Deep Match CSS Injected');
         })
         .catch(err => {
-            console.error('Failed to load Cheapazon CSS:', err);
+            console.error('Failed to load Deep Match CSS:', err);
         });
 
     // Create React Root

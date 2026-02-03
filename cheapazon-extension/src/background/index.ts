@@ -1,17 +1,13 @@
-console.log('MakeItCheaper Background Script Running');
+console.log('Deep Match Background Script Running');
 
 chrome.runtime.onInstalled.addListener(() => {
-    console.log('MakeItCheaper Extension Installed');
+    console.log('Deep Match Extension Installed');
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'SEARCH_ALI') {
         const { asin, title, price, imageUrl, currency, domain } = message.payload;
-        // const API_BASE_URL = 'http://localhost:3000'; // Local development
         const API_BASE_URL = 'https://make-it-cheaper.vercel.app'; // Production
-        // Feature/Develop branch URLs for testing:
-        // const API_BASE_URL = 'https://make-it-cheaper-git-feature...vercel.app';
-        // const API_BASE_URL = 'https://make-it-cheaper-git-develop...vercel.app';
         console.log('[Background] Searching AliExpress for:', title);
 
         fetch(`${API_BASE_URL}/api/compare`, {
